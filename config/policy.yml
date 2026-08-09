@@ -1,0 +1,38 @@
+# Multi-Agent Engineering — política configurable.
+# Copiar a .claude/multi-agent/config/policy.yml en el proyecto objetivo para sobreescribir
+# los defaults. El Orchestrator lee este archivo en el bootstrap (SKILL.md §2).
+
+loop:
+  max_iterations: 6          # cota dura; al alcanzarla → HUMAN_REQUIRED
+  stall_threshold: 2         # iteraciones sin progreso significativo → LOOP_STALLED
+  max_fix_attempts: 3        # por finding; al superarlo → escalar ese finding
+
+# Política de severidad → producción (reference/severity-gates.md).
+severity_policy:
+  CRITICAL: block            # nunca a producción
+  HIGH:     block            # nunca salvo override documentado (ver allow_high_override)
+  MEDIUM:   mitigate_or_accept   # requiere mitigación o aceptación de riesgo (ADR)
+  LOW:      accept_with_docs
+  INFO:     informational
+  allow_high_override: false     # si true, un HIGH puede aceptarse SOLO con ADR + authorized_by
+
+# Qué gates son obligatorios por clase de tarea (además del juicio del Orchestrator).
+# El Planner propone; el Orchestrator confirma. Ver reference/pipeline-selection.md.
+gates:
+  always: [qa]
+  security_surfaces: [api, auth, datos, infra]   # estas superficies exigen appsec/red-team
+  require_appsec_on: [auth, cripto, dependencias, config-seguridad, arquitectura]
+  require_red_team_on: [entradas-no-confiables, auth, api-expuesta, secretos]
+
+# Operaciones que el sistema NUNCA ejecuta automáticamente (requieren autorización humana).
+guardrails:
+  forbidden_git: ["reset --hard", "clean -fd", "push --force", "rebase (history rewrite)"]
+  never_auto_deploy: true
+  never_touch_external_systems: true       # Red Team solo dentro del entorno autorizado
+  escalate_on_secrets_required: true
+
+# Escalada a humano (SKILL.md §9). Condiciones que fuerzan HUMAN_REQUIRED.
+escalation:
+  on: [ambiguous_requirements, destructive_op, prod_infra, critical_vuln,
+       irreversible_migration, credentials_needed, external_authz_unclear,
+       loop_stalled, max_iterations, conflicting_recommendations]
